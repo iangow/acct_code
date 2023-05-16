@@ -1,0 +1,47 @@
+---
+title: "CFO versus net income"
+author: "Ian D. Gow"
+date: "May 2, 2015"
+output: pdf_document
+---
+
+```{r get_data, message=FALSE, include=FALSE, cache=TRUE}
+library("RPostgreSQL")
+pg <- dbConnect(PostgreSQL())
+
+dbGetQuery(pg, "SET work_mem='3GB';")
+
+sql <- "
+    WITH raw_data AS (
+        SELECT fyear, gvkey, oancf, ni, 
+            lag(at) OVER w AS lag_at
+        FROM comp.funda 
+        WHERE oancf IS NOT NULL
+        WINDOW w AS (PARTITION BY gvkey ORDER BY fyear))
+
+    SELECT fyear, 
+        median(oancf/lag_at) AS cfo,
+        median( ni/lag_at ) AS income
+    FROM raw_data
+    WHERE lag_at > 0
+    GROUP BY fyear
+    ORDER BY fyear;"
+
+df <- dbGetQuery(pg, sql)
+
+dbDisconnect(pg)
+```
+
+Here's SQL to get cash flow from operations and net income by fiscal year from Compustat.
+```{r show_sql, code=sql, eval=FALSE}
+```
+
+Here's a plot of the resulting data.
+
+```{r, echo=FALSE, fig.height=3.5}
+library("tidyr")
+graph_df <- gather(df, "Measure", "Value", 2:3)
+
+library("ggplot2")
+ggplot(graph_df, aes(x=fyear, y=Value, colour=Measure)) + geom_line() +  xlab("Fiscal Year")
+```
